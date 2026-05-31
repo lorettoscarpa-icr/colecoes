@@ -3906,7 +3906,8 @@ const VIEW_MODE_KEY = 'loretto_view_mode';
 // Firestore collection names
 const FIRESTORE_COLLECTION = 'colecoes_modelos';   // /colecoes_modelos/{year}
 const FIRESTORE_USERS_COLLECTION = 'colecoes_users'; // /colecoes_users/{userId}
-const STORAGE_BUCKET_MODELS = 'colecoes_modelos';  // path prefix in Storage
+const FIRESTORE_PHOTOS_COLLECTION = 'colecoes_fotos'; // /colecoes_fotos/{photoId} — base64 stored here (no Storage/CORS needed)
+const STORAGE_BUCKET_MODELS = 'colecoes_modelos';  // path prefix in Storage (legacy)
 const STORAGE_BUCKET_USERS  = 'colecoes_users';
 
 // Real-time listener cleanup function
@@ -4069,16 +4070,16 @@ async function savePhoto(photoId, base64) {
 async function savePhotoToFirebase(photoId, base64) {
   setSyncStatus('syncing', 'Enviando foto...');
   try {
-    // Convert base64 to blob
-    const response = await fetch(base64);
-    const blob = await response.blob();
-
-    const ref = firebaseStorage.ref(`${STORAGE_BUCKET_MODELS}/${photoId}.jpg`);
-    await ref.put(blob, { contentType: 'image/jpeg' });
+    // Store the image as base64 inside Firestore — avoids Storage CORS issues entirely.
+    await firebaseDb.collection(FIRESTORE_PHOTOS_COLLECTION).doc(photoId).set({
+      data: base64,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: state.currentUser || 'unknown'
+    });
     setSyncStatus('', 'Sincronizado');
     return true;
   } catch (err) {
-    console.error('Firebase photo upload failed:', err);
+    console.error('Firestore photo save failed:', err);
     setSyncStatus('offline', 'Foto salva offline');
     return false;
   }
@@ -4089,12 +4090,14 @@ async function loadPhoto(photoId) {
 
   if (useFirebase()) {
     try {
-      const ref = firebaseStorage.ref(`${STORAGE_BUCKET_MODELS}/${photoId}.jpg`);
-      const url = await ref.getDownloadURL();
-      state.photoCache.set(photoId, url);
-      return url;
+      const doc = await firebaseDb.collection(FIRESTORE_PHOTOS_COLLECTION).doc(photoId).get();
+      if (doc.exists && doc.data() && doc.data().data) {
+        const data = doc.data().data;
+        state.photoCache.set(photoId, data);
+        return data;
+      }
     } catch (err) {
-      // Photo doesn't exist in Firebase — try localStorage
+      // Not in Firestore — try localStorage
     }
   }
 
@@ -4120,10 +4123,10 @@ async function loadPhoto(photoId) {
 async function deletePhoto(photoId) {
   state.photoCache.delete(photoId);
 
-  // Try delete from Firebase
+  // Try delete from Firebase (Firestore)
   if (useFirebase()) {
     try {
-      await firebaseStorage.ref(`${STORAGE_BUCKET_MODELS}/${photoId}.jpg`).delete();
+      await firebaseDb.collection(FIRESTORE_PHOTOS_COLLECTION).doc(photoId).delete();
     } catch (err) { /* may not exist */ }
   }
 
@@ -4185,10 +4188,11 @@ async function loadUserPhoto(userId) {
 
   if (useFirebase()) {
     try {
-      const ref = firebaseStorage.ref(`${STORAGE_BUCKET_USERS}/${userId}.jpg`);
-      const url = await ref.getDownloadURL();
-      state.userPhotos[userId] = url;
-      return url;
+      const doc = await firebaseDb.collection(FIRESTORE_USERS_COLLECTION).doc(userId).get();
+      if (doc.exists && doc.data() && doc.data().photo) {
+        state.userPhotos[userId] = doc.data().photo;
+        return doc.data().photo;
+      }
     } catch (err) { /* fall through */ }
   }
 
@@ -4219,13 +4223,13 @@ async function saveUserPhoto(userId, base64) {
 
   if (useFirebase()) {
     try {
-      const response = await fetch(base64);
-      const blob = await response.blob();
-      const ref = firebaseStorage.ref(`${STORAGE_BUCKET_USERS}/${userId}.jpg`);
-      await ref.put(blob, { contentType: 'image/jpeg' });
+      await firebaseDb.collection(FIRESTORE_USERS_COLLECTION).doc(userId).set({
+        photo: base64,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
       return;
     } catch (err) {
-      console.error('Firebase user photo upload failed:', err);
+      console.error('Firestore user photo save failed:', err);
     }
   }
 
