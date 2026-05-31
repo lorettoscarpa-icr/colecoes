@@ -3093,6 +3093,129 @@ window.AUTHORIZED_USERS = {
     box-shadow: 0 0 0 2px var(--gold);
   }
 
+  /* ============== BULK SELECTION MODE ============== */
+  body.select-mode .model-card,
+  body.select-mode .lookbook-item { cursor: pointer; }
+
+  .model-card.selected,
+  .lookbook-item.selected {
+    position: relative;
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .model-card.selected::before,
+  .lookbook-item.selected::before {
+    content: '✓';
+    position: absolute;
+    top: 8px; left: 8px;
+    z-index: 6;
+    width: 26px; height: 26px;
+    background: var(--gold);
+    color: var(--bg);
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+  }
+
+  .bulk-bar {
+    position: fixed;
+    left: 50%;
+    bottom: 28px;
+    transform: translateX(-50%) translateY(140%);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    transition: transform 0.28s cubic-bezier(0.2,0.8,0.2,1), opacity 0.2s;
+    pointer-events: none;
+    max-width: calc(100vw - 32px);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .bulk-bar.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .bulk-count {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--gold);
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  .bulk-month {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    max-width: 200px;
+  }
+
+  .bulk-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.15s, background 0.15s;
+  }
+
+  .bulk-btn-primary { background: var(--gold); color: var(--bg); }
+  .bulk-btn-primary:hover { filter: brightness(1.08); }
+  .bulk-btn-ghost { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
+  .bulk-btn-ghost:hover { color: var(--text); border-color: var(--border-strong); }
+
+  .month-action-btn.active {
+    background: var(--gold);
+    color: var(--bg);
+    border-color: var(--gold);
+  }
+
+  /* ICR readout in the model modal */
+  .icr-readout {
+    display: flex;
+    align-items: center;
+    height: 42px;
+    padding: 0 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-family: 'DM Mono', monospace;
+  }
+  .icr-readout .icr-value { font-size: 16px; color: var(--text-2); font-weight: 600; }
+  .icr-readout.good { border-color: #5d7a3a; background: rgba(93,122,58,0.12); }
+  .icr-readout.good .icr-value { color: #8fbf5e; }
+  .icr-readout.warn { border-color: #b8922e; background: rgba(184,146,46,0.12); }
+  .icr-readout.warn .icr-value { color: #e0b84a; }
+  .icr-readout.bad { border-color: #a8442e; background: rgba(168,68,46,0.14); }
+  .icr-readout.bad .icr-value { color: #e07a5f; }
+  .icr-hint {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-3);
+    letter-spacing: 0.02em;
+    line-height: 1.5;
+  }
+  .icr-hint strong { color: var(--gold); font-weight: 600; }
+
   /* ============== HISTORY/COPY ACTIONS ============== */
   .month-actions {
     display: flex;
@@ -3650,6 +3773,14 @@ window.AUTHORIZED_USERS = {
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<!-- Bulk action bar (selection mode) -->
+<div class="bulk-bar" id="bulkBar">
+  <span class="bulk-count" id="bulkCount">0 selecionados</span>
+  <select class="bulk-month" id="bulkMonth"></select>
+  <button class="bulk-btn bulk-btn-primary" id="bulkMoveBtn">Mover</button>
+  <button class="bulk-btn bulk-btn-ghost" id="bulkCancelBtn">Sair</button>
+</div>
+
 <script>
 // ============================================================
 // FIREBASE INITIALIZATION
@@ -3882,7 +4013,9 @@ const state = {
   currentUser: null,
   viewMode: 'grid', // grid | lookbook
   theme: 'dark', // dark | light
-  loading: false
+  loading: false,
+  selectMode: false,        // bulk selection mode (for moving several models at once)
+  selectedIds: new Set()    // ids of models currently selected
 };
 // Expose for debugging in browser console
 window.state = state;
@@ -5061,6 +5194,7 @@ function renderRemessaView() {
       <button class="month-action-btn ${!canUser('copy') ? 'disabled' : ''}" id="copyFromPrevYear" ${!canUser('copy') ? 'disabled' : ''}>
         ↺ Copiar de ${state.currentYear - 1}
       </button>
+      <button class="month-action-btn" id="selectModeBtn">☑ Selecionar</button>
       <div class="export-dropdown" id="exportDropdown">
         <button class="month-action-btn export-trigger" id="exportTriggerBtn">
           ⬇ Exportar <span class="export-arrow">▾</span>
@@ -5139,6 +5273,7 @@ function renderRemessaView() {
   root.querySelectorAll('.month-tab').forEach(tab => {
     tab.onclick = () => {
       state.currentMonth = tab.dataset.month;
+      if (state.selectMode) { state.selectedIds = new Set(); updateBulkBar(); }
       renderRemessaView();
     };
   });
@@ -5175,6 +5310,14 @@ function renderRemessaView() {
   const copyBtn = document.getElementById('copyFromPrevYear');
   if (copyBtn && canUser('copy')) {
     copyBtn.onclick = handleCopyFromPrevYear;
+  }
+
+  // Bind bulk-select toggle
+  const selBtn = document.getElementById('selectModeBtn');
+  if (selBtn) {
+    selBtn.onclick = () => { state.selectMode ? exitSelectMode() : enterSelectMode(); };
+    selBtn.classList.toggle('active', state.selectMode);
+    selBtn.textContent = state.selectMode ? '✕ Cancelar seleção' : '☑ Selecionar';
   }
 
   // Export dropdown — single trigger that opens menu with all export options
@@ -5512,7 +5655,14 @@ function renderCategories() {
     `;
 
     container.querySelectorAll('.lookbook-item').forEach(item => {
-      item.onclick = () => openModelModal(item.dataset.id);
+      const id = item.dataset.id;
+      if (state.selectMode && state.selectedIds && state.selectedIds.has(id)) {
+        item.classList.add('selected');
+      }
+      item.onclick = () => {
+        if (state.selectMode) { toggleSelect(id); return; }
+        openModelModal(id);
+      };
     });
 
     container.querySelectorAll('img[data-photo-id]').forEach(async img => {
@@ -5566,13 +5716,20 @@ function renderCategories() {
   container.querySelectorAll('.model-card').forEach(card => {
     const id = card.dataset.id;
 
+    // Reflect current selection state
+    if (state.selectMode && state.selectedIds && state.selectedIds.has(id)) {
+      card.classList.add('selected');
+    }
+
     card.querySelector('.model-photo').onclick = (e) => {
       if (e.target.closest('.joice-mark')) return;
+      if (state.selectMode) { toggleSelect(id); return; }
       openModelModal(id);
     };
 
     card.querySelector('.status-badge').onclick = async (e) => {
       e.stopPropagation();
+      if (state.selectMode) { toggleSelect(id); return; }
       const m = findModel(state.currentYear, id);
       if (!canEditModel(m)) {
         showToast(state.currentUser === 'joice' ? 'Você só pode editar seus próprios modelos' : 'Sem permissão');
@@ -5589,6 +5746,7 @@ function renderCategories() {
     const joiceMark = card.querySelector('.joice-mark');
     joiceMark.onclick = async (e) => {
       e.stopPropagation();
+      if (state.selectMode) { toggleSelect(id); return; }
       if (!canUser('approve')) {
         showToast('Sem permissão para aprovar');
         return;
@@ -5610,8 +5768,8 @@ function renderCategories() {
       setTimeout(() => renderRemessaView(), 300);
     };
 
-    // Drag-and-drop
-    if (canUser('drag')) {
+    // Drag-and-drop (disabled while selecting)
+    if (canUser('drag') && !state.selectMode) {
       card.draggable = true;
       card.ondragstart = (e) => {
         card.classList.add('dragging');
@@ -5725,6 +5883,92 @@ let modalPhotoEditable = false;
 function remessaIdForMonth(month) {
   const r = REMESSAS.find(x => x.months.includes(month));
   return r ? r.id : state.currentRemessa;
+}
+
+// ============================================================
+// BULK SELECTION (move several models at once)
+// ============================================================
+function populateBulkMonths() {
+  const sel = document.getElementById('bulkMonth');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Mover para…</option>' + REMESSAS.map(rm =>
+    `<optgroup label="${rm.label} Remessa">` +
+    rm.months.map(mo => `<option value="${mo}">${mo}${rm.campaigns[mo] ? ' · ' + rm.campaigns[mo] : ''}</option>`).join('') +
+    `</optgroup>`
+  ).join('');
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  if (!bar) return;
+  const n = state.selectedIds ? state.selectedIds.size : 0;
+  if (state.selectMode) {
+    bar.classList.add('show');
+    const countEl = document.getElementById('bulkCount');
+    if (countEl) countEl.textContent = `${n} ${n === 1 ? 'selecionado' : 'selecionados'}`;
+  } else {
+    bar.classList.remove('show');
+  }
+  const btn = document.getElementById('selectModeBtn');
+  if (btn) {
+    btn.classList.toggle('active', state.selectMode);
+    btn.textContent = state.selectMode ? '✕ Cancelar seleção' : '☑ Selecionar';
+  }
+}
+
+function enterSelectMode() {
+  state.selectMode = true;
+  state.selectedIds = new Set();
+  document.body.classList.add('select-mode');
+  const sel = document.getElementById('bulkMonth');
+  if (sel) sel.value = '';
+  updateBulkBar();
+  renderCategories();
+}
+
+function exitSelectMode() {
+  state.selectMode = false;
+  state.selectedIds = new Set();
+  document.body.classList.remove('select-mode');
+  updateBulkBar();
+  renderCategories();
+}
+
+function toggleSelect(id) {
+  if (!state.selectedIds) state.selectedIds = new Set();
+  if (state.selectedIds.has(id)) state.selectedIds.delete(id);
+  else state.selectedIds.add(id);
+  const el = document.querySelector(`.model-card[data-id="${id}"], .lookbook-item[data-id="${id}"]`);
+  if (el) el.classList.toggle('selected', state.selectedIds.has(id));
+  updateBulkBar();
+}
+
+async function bulkMoveToMonth(targetMonth) {
+  if (!targetMonth) { showToast('Escolha o mês de destino'); return; }
+  const ids = [...(state.selectedIds || [])];
+  if (ids.length === 0) { showToast('Nenhum modelo selecionado'); return; }
+
+  const targetRemessa = remessaIdForMonth(targetMonth);
+  let moved = 0, skipped = 0;
+  for (const id of ids) {
+    const m = findModel(state.currentYear, id); // live reference in state.data
+    if (!m) continue;
+    if (!canEditModel(m)) { skipped++; continue; }
+    if (m.month === targetMonth) { continue; }
+    const old = m.month;
+    m.month = targetMonth;
+    m.remessaId = targetRemessa;
+    addHistory(m, `Movido de ${old} para ${targetMonth} (em lote)`);
+    moved++;
+  }
+
+  if (moved > 0) await saveAll();
+  exitSelectMode();
+  renderRemessaView();
+
+  let msg = `${moved} ${moved === 1 ? 'modelo movido' : 'modelos movidos'} para ${targetMonth}`;
+  if (skipped > 0) msg += ` · ${skipped} ignorado(s) sem permissão`;
+  showToast(moved > 0 ? msg : 'Nada foi movido');
 }
 
 // Centralized photo handler — used by click-to-upload, drag & drop, and Ctrl+V paste
@@ -5873,13 +6117,25 @@ function openModelModal(modelId, defaultCategory) {
         <div class="field-row">
           <div class="field">
             <label>Preço de Custo (R$)</label>
-            <input id="fCost" type="number" inputmode="decimal" step="0.01" placeholder="0,00" value="${modalState.cost || ''}" ${!editable ? 'disabled' : ''}>
+            <input id="fCost" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${modalState.cost ? String(modalState.cost).replace('.', ',') : ''}" ${!editable ? 'disabled' : ''}>
           </div>
           <div class="field">
             <label>Quantidade de Pares</label>
-            <input id="fPairs" type="number" inputmode="numeric" step="1" min="0" placeholder="0" value="${modalState.pairs || ''}" ${!editable ? 'disabled' : ''}>
+            <input id="fPairs" type="text" inputmode="numeric" autocomplete="off" placeholder="0" value="${modalState.pairs || ''}" ${!editable ? 'disabled' : ''}>
           </div>
         </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Preço de Venda (R$)</label>
+            <input id="fSalePrice" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${modalState.salePrice ? String(modalState.salePrice).replace('.', ',') : ''}" ${!editable ? 'disabled' : ''}>
+          </div>
+          <div class="field">
+            <label>ICR (custo ÷ venda)</label>
+            <div class="icr-readout" id="icrReadout"><span class="icr-value">—</span></div>
+          </div>
+        </div>
+        <div class="icr-hint" id="icrHint">Digite o custo para ver a sugestão de preço de venda (ICR 40–45%).</div>
 
         <div class="total-display" id="totalDisplay">
           <span class="total-label">Valor Total do Modelo</span>
@@ -6032,28 +6288,69 @@ function openModelModal(modelId, defaultCategory) {
     };
   });
 
-  // Live total: cost × pairs
+  // Live total + ICR-based sale price suggestion
   const fCost = document.getElementById('fCost');
   const fPairs = document.getElementById('fPairs');
+  const fSale = document.getElementById('fSalePrice');
   const totalValueEl = document.getElementById('totalValue');
+  const icrReadout = document.getElementById('icrReadout');
+  const icrHint = document.getElementById('icrHint');
 
-  function updateTotal() {
-    const cost = parseFloat(fCost?.value) || 0;
-    const pairs = parseInt(fPairs?.value, 10) || 0;
+  const ICR_IDEAL = 0.40, ICR_MAX = 0.45;
+  // If the model already has a sale price, treat it as user-defined (don't overwrite)
+  let saleTouched = !!(modalState.salePrice);
+
+  function updateCommercial() {
+    const cost = parseMoney(fCost?.value);
+    const pairs = parseInt((fPairs?.value || '').replace(/\D/g, ''), 10) || 0;
+
+    // Total = cost × pairs
     const total = cost * pairs;
-    if (!totalValueEl) return;
-    if (total > 0) {
-      totalValueEl.classList.remove('empty');
-      totalValueEl.textContent = 'R$ ' + formatMoney(total);
-    } else {
-      totalValueEl.classList.add('empty');
-      totalValueEl.textContent = 'preencha custo e pares';
+    if (totalValueEl) {
+      if (total > 0) {
+        totalValueEl.classList.remove('empty');
+        totalValueEl.textContent = 'R$ ' + formatMoney(total);
+      } else {
+        totalValueEl.classList.add('empty');
+        totalValueEl.textContent = 'preencha custo e pares';
+      }
+    }
+
+    // Auto-suggest sale price (ICR 40%) only if the user hasn't set one
+    if (fSale && editable && !saleTouched && cost > 0) {
+      fSale.value = String(Math.round(cost / ICR_IDEAL)).replace('.', ',');
+    }
+
+    // Live ICR readout + suggestion range
+    const sale = parseMoney(fSale?.value);
+    if (icrReadout) {
+      if (cost > 0 && sale > 0) {
+        const icr = cost / sale;
+        let cls = 'good';
+        if (icr > ICR_MAX) cls = 'bad';
+        else if (icr > ICR_IDEAL) cls = 'warn';
+        icrReadout.className = 'icr-readout ' + cls;
+        icrReadout.innerHTML = `<span class="icr-value">${(icr * 100).toFixed(1).replace('.', ',')}%</span>`;
+      } else {
+        icrReadout.className = 'icr-readout';
+        icrReadout.innerHTML = `<span class="icr-value">—</span>`;
+      }
+    }
+    if (icrHint) {
+      if (cost > 0) {
+        const ideal = Math.round(cost / ICR_IDEAL);
+        const min = Math.round(cost / ICR_MAX);
+        icrHint.innerHTML = `Sugerido <strong>(ICR 40%): R$ ${formatMoney(ideal)}</strong> · Mínimo (ICR 45%): R$ ${formatMoney(min)}`;
+      } else {
+        icrHint.textContent = 'Digite o custo para ver a sugestão de preço de venda (ICR 40–45%).';
+      }
     }
   }
 
-  if (fCost) fCost.oninput = updateTotal;
-  if (fPairs) fPairs.oninput = updateTotal;
-  updateTotal();
+  if (fCost) fCost.oninput = updateCommercial;
+  if (fPairs) fPairs.oninput = updateCommercial;
+  if (fSale) fSale.oninput = () => { saleTouched = true; updateCommercial(); };
+  updateCommercial();
 
   // Comments
   if (isEdit && canComment) {
@@ -6166,10 +6463,10 @@ async function saveModelFromModal() {
   modalState.name = document.getElementById('fName').value.trim();
   modalState.color = document.getElementById('fColor').value.trim();
   // leather is already in modalState (synced via pill click)
-  const costRaw = document.getElementById('fCost').value;
-  modalState.cost = costRaw ? parseFloat(costRaw) : 0;
-  const pairsRaw = document.getElementById('fPairs').value;
-  modalState.pairs = pairsRaw ? parseInt(pairsRaw, 10) : 0;
+  modalState.cost = parseMoney(document.getElementById('fCost').value);
+  modalState.pairs = parseInt((document.getElementById('fPairs').value || '').replace(/\D/g, ''), 10) || 0;
+  const saleEl = document.getElementById('fSalePrice');
+  if (saleEl) modalState.salePrice = parseMoney(saleEl.value);
 
   if (!modalState.name) {
     showToast('Coloque pelo menos o nome do modelo');
@@ -8315,6 +8612,7 @@ window.addEventListener('resize', () => {
 // NAVIGATION
 // ============================================================
 function goToYear() {
+  if (state.selectMode) exitSelectMode();
   state.view = 'year';
   state.currentRemessa = null;
   state.currentMonth = null;
@@ -8325,6 +8623,7 @@ function goToYear() {
 }
 
 function goToRemessa(remessaId) {
+  if (state.selectMode) exitSelectMode();
   state.view = 'remessa';
   state.currentRemessa = remessaId;
   const r = REMESSAS.find(x => x.id === remessaId);
@@ -8361,6 +8660,21 @@ function formatMoney(v) {
 // Style based on the visual reference: small "R$" + gold italic Playfair value
 function formatPrice(v) {
   return `<span class="price"><span class="price-currency">R$</span><span class="price-value">${formatMoney(v)}</span></span>`;
+}
+
+// Robust number parser: accepts "1.234,56", "1234,56", "150.50", "1500", etc.
+// Treats the LAST comma/dot as the decimal separator; strips the rest as thousands.
+function parseMoney(str) {
+  if (typeof str === 'number') return isFinite(str) ? str : 0;
+  if (str == null) return 0;
+  let s = String(str).trim().replace(/[^\d.,]/g, '');
+  if (!s) return 0;
+  const decPos = Math.max(s.lastIndexOf(','), s.lastIndexOf('.'));
+  if (decPos === -1) return parseInt(s, 10) || 0;
+  const intPart = s.slice(0, decPos).replace(/[.,]/g, '');
+  const decPart = s.slice(decPos + 1).replace(/[.,]/g, '');
+  const val = parseFloat((intPart || '0') + '.' + (decPart || '0'));
+  return isFinite(val) ? val : 0;
 }
 
 // Same look but with inline styles, for PDF popups (where our CSS classes aren't available)
@@ -8539,8 +8853,29 @@ document.getElementById('modalBg').onclick = (e) => {
   if (e.target.id === 'modalBg') closeModal();
 };
 
+// Bulk-move bar wiring (selection mode)
+populateBulkMonths();
+(() => {
+  const moveBtn = document.getElementById('bulkMoveBtn');
+  const cancelBtn = document.getElementById('bulkCancelBtn');
+  const monthSel = document.getElementById('bulkMonth');
+  if (moveBtn) moveBtn.onclick = () => {
+    const target = monthSel ? monthSel.value : '';
+    if (!target) { showToast('Escolha o mês de destino'); return; }
+    const n = state.selectedIds ? state.selectedIds.size : 0;
+    if (n === 0) { showToast('Selecione ao menos um modelo'); return; }
+    if (confirm(`Mover ${n} ${n === 1 ? 'modelo' : 'modelos'} para ${target}?`)) {
+      bulkMoveToMonth(target);
+    }
+  };
+  if (cancelBtn) cancelBtn.onclick = exitSelectMode;
+})();
+
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') {
+    if (state.selectMode) { exitSelectMode(); return; }
+    closeModal();
+  }
 });
 
 // Ctrl+V / Cmd+V: paste an image straight into the open model modal's photo area
