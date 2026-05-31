@@ -2263,6 +2263,11 @@ window.AUTHORIZED_USERS = {
 
   .photo-drop:hover { border-color: var(--gold-soft); }
 
+  .photo-drop.drag-over {
+    border-color: var(--gold);
+    background: var(--gold-glow);
+  }
+
   .photo-drop.has-photo {
     border-style: solid;
     border-color: var(--border);
@@ -5709,6 +5714,39 @@ function modelCardHTML(m) {
 // MODAL
 // ============================================================
 let modalState = {};
+// Whether the currently open modal allows photo editing (used by the global paste listener)
+let modalPhotoEditable = false;
+
+// Which remessa owns a given month (for moving models between months)
+function remessaIdForMonth(month) {
+  const r = REMESSAS.find(x => x.months.includes(month));
+  return r ? r.id : state.currentRemessa;
+}
+
+// Centralized photo handler — used by click-to-upload, drag & drop, and Ctrl+V paste
+async function applyPhotoFile(file) {
+  if (!file || !file.type || !file.type.startsWith('image/')) return;
+  showToast('Processando foto...');
+  try {
+    const compressed = await compressImage(file);
+    const newId = 'p_' + createModelId();
+    if (modalState.photoId) await deletePhoto(modalState.photoId);
+    modalState.photoId = newId;
+    await savePhoto(newId, compressed);
+    const photoDrop = document.getElementById('photoDrop');
+    if (photoDrop) {
+      photoDrop.classList.add('has-photo');
+      photoDrop.innerHTML = `<img src="${compressed}"><input type="file" id="photoInput" accept="image/*" style="display:none"><div class="photo-replace">Trocar foto</div>`;
+      const newInput = document.getElementById('photoInput');
+      photoDrop.onclick = () => newInput.click();
+      newInput.onchange = (e) => { const f = e.target.files[0]; if (f) applyPhotoFile(f); };
+    }
+    showToast('Foto adicionada');
+  } catch (err) {
+    showToast('Erro ao processar foto');
+    console.error(err);
+  }
+}
 
 function openModelModal(modelId, defaultCategory) {
   const isEdit = !!modelId;
@@ -5768,7 +5806,7 @@ function openModelModal(modelId, defaultCategory) {
           <input type="file" id="photoInput" accept="image/*" style="display:none" ${!editable ? 'disabled' : ''}>
           ${modalState.photoId
             ? `<img id="photoPreview" alt="">`
-            : `<div class="photo-drop-text"><strong>+ Adicionar foto</strong>${editable ? 'Clique ou arraste' : 'Sem foto'}</div>`
+            : `<div class="photo-drop-text"><strong>+ Adicionar foto</strong>${editable ? 'Clique, arraste ou cole (Ctrl+V)' : 'Sem foto'}</div>`
           }
           ${modalState.photoId && editable ? `<div class="photo-replace">Trocar foto</div>` : ''}
         </div>
@@ -5865,6 +5903,23 @@ function openModelModal(modelId, defaultCategory) {
 
       ${isEdit ? `
         <div class="form-section">
+          <div class="form-section-label">Localização</div>
+          <div class="field">
+            <label>Mês / Remessa</label>
+            <select id="fMonth" ${!editable ? 'disabled' : ''}>
+              ${REMESSAS.map(rm => `
+                <optgroup label="${rm.label} Remessa">
+                  ${rm.months.map(mo => `<option value="${mo}" ${mo === modalState.month ? 'selected' : ''}>${mo}${rm.campaigns[mo] ? ' · ' + rm.campaigns[mo] : ''}</option>`).join('')}
+                </optgroup>
+              `).join('')}
+            </select>
+            ${editable ? `<div style="font-size:11px;color:var(--text-3);margin-top:6px;letter-spacing:.02em;">Mude o mês e salve para mover este modelo de remessa.</div>` : ''}
+          </div>
+        </div>
+      ` : ''}
+
+      ${isEdit ? `
+        <div class="form-section">
           <div class="form-section-label">Conversa</div>
           <div class="comments-section" style="border-top: none; padding-top: 0; margin-top: 0;">
             <div class="comments-header">
@@ -5917,28 +5972,19 @@ function openModelModal(modelId, defaultCategory) {
     const photoDrop = document.getElementById('photoDrop');
     const photoInput = document.getElementById('photoInput');
     photoDrop.onclick = () => photoInput.click();
-    photoInput.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      showToast('Processando foto...');
-      try {
-        const compressed = await compressImage(file);
-        const newId = 'p_' + createModelId();
-        if (modalState.photoId) await deletePhoto(modalState.photoId);
-        modalState.photoId = newId;
-        await savePhoto(newId, compressed);
-        photoDrop.classList.add('has-photo');
-        photoDrop.innerHTML = `<img src="${compressed}"><input type="file" id="photoInput" accept="image/*" style="display:none"><div class="photo-replace">Trocar foto</div>`;
-        const newInput = document.getElementById('photoInput');
-        photoDrop.onclick = () => newInput.click();
-        newInput.onchange = photoInput.onchange;
-        showToast('Foto adicionada');
-      } catch (err) {
-        showToast('Erro ao processar foto');
-        console.error(err);
-      }
+    photoInput.onchange = (e) => { const f = e.target.files[0]; if (f) applyPhotoFile(f); };
+    // Drag & drop
+    photoDrop.ondragover = (e) => { e.preventDefault(); photoDrop.classList.add('drag-over'); };
+    photoDrop.ondragleave = () => photoDrop.classList.remove('drag-over');
+    photoDrop.ondrop = (e) => {
+      e.preventDefault();
+      photoDrop.classList.remove('drag-over');
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) applyPhotoFile(f);
     };
   }
+  // Enable Ctrl+V paste-to-photo while this modal is open and editable
+  modalPhotoEditable = editable;
 
   // Bind status pills
   modal.querySelectorAll('[data-fstatus]').forEach(p => {
@@ -6126,22 +6172,37 @@ async function saveModelFromModal() {
     return;
   }
 
+  // Detect month move (existing models only)
+  let movedTo = null;
+  const monthSel = document.getElementById('fMonth');
+  if (monthSel && !isNew) {
+    const targetMonth = monthSel.value;
+    if (targetMonth && targetMonth !== modalState.month) {
+      const oldMonth = modalState.month;
+      modalState.month = targetMonth;
+      modalState.remessaId = remessaIdForMonth(targetMonth);
+      addHistory(modalState, `Movido de ${oldMonth} para ${targetMonth}`);
+      movedTo = targetMonth;
+    }
+  }
+
   if (isNew) {
     // Make sure ownership is recorded for new models
     if (!modalState.createdBy) modalState.createdBy = state.currentUser;
     const ownerName = USERS[modalState.createdBy]?.name || 'Sistema';
     addHistory(modalState, `Modelo criado por ${ownerName}`);
-  } else {
+  } else if (!movedTo) {
     addHistory(modalState, 'Modelo editado');
   }
 
   await upsertModel(state.currentYear, modalState);
   closeModal();
   renderRemessaView();
-  showToast(isNew ? 'Modelo adicionado' : 'Modelo atualizado');
+  showToast(isNew ? 'Modelo adicionado' : (movedTo ? `Modelo movido para ${movedTo}` : 'Modelo atualizado'));
 }
 
 function closeModal() {
+  modalPhotoEditable = false;
   document.getElementById('modalBg').classList.remove('show');
 }
 
@@ -8476,6 +8537,24 @@ document.getElementById('modalBg').onclick = (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeModal();
+});
+
+// Ctrl+V / Cmd+V: paste an image straight into the open model modal's photo area
+document.addEventListener('paste', (e) => {
+  const modalOpen = document.getElementById('modalBg')?.classList.contains('show');
+  if (!modalOpen || !modalPhotoEditable) return;
+  const items = (e.clipboardData || window.clipboardData)?.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      const file = it.getAsFile();
+      if (file) {
+        e.preventDefault();
+        applyPhotoFile(file);
+        return;
+      }
+    }
+  }
 });
 
 (async () => {
