@@ -3216,6 +3216,40 @@ window.AUTHORIZED_USERS = {
   }
   .icr-hint strong { color: var(--gold); font-weight: 600; }
 
+  /* Sale price line on the card */
+  .model-sale {
+    margin-top: 5px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .model-sale .price { font-size: 0.92em; }
+  .model-sale.model-sale-sug { color: var(--text-3); font-style: italic; }
+  .model-icr {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+  }
+  .model-icr.good { color: #8fbf5e; }
+  .model-icr.warn { color: #e0b84a; }
+  .model-icr.bad  { color: #e07a5f; }
+  .model-icr-hint {
+    font-size: 10px;
+    color: var(--text-3);
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px dashed var(--border);
+    font-style: normal;
+  }
+
   /* ============== HISTORY/COPY ACTIONS ============== */
   .month-actions {
     display: flex;
@@ -5838,6 +5872,23 @@ function modelCardHTML(m) {
       }).join('')}</div>`
     : '';
 
+  // Sale price line: defined price (with ICR) or, if none, the ICR-40% suggestion
+  let salesLine = '';
+  if (m.salePrice > 0) {
+    const icr = m.cost > 0 ? (m.cost / m.salePrice) : 0;
+    let cls = 'good';
+    if (icr > 0.45) cls = 'bad'; else if (icr > 0.40) cls = 'warn';
+    salesLine = `<div class="model-sale">Venda ${formatPrice(m.salePrice)}${icr > 0 ? ` <span class="model-icr ${cls}">ICR ${Math.round(icr * 100)}%</span>` : ''}</div>`;
+  } else if (m.cost > 0) {
+    const floor = Math.ceil((m.cost / 0.45) / 10) * 10;   // ICR 45% — preço mínimo
+    let ideal = Math.round((m.cost / 0.40) / 10) * 10;    // ICR 40% — preço ideal
+    if (ideal < floor) ideal = floor;
+    const range = floor === ideal
+      ? `R$ ${floor.toLocaleString('pt-BR')}`
+      : `R$ ${floor.toLocaleString('pt-BR')}–${ideal.toLocaleString('pt-BR')}`;
+    salesLine = `<div class="model-sale model-sale-sug">Venda sug. <strong>${range}</strong> <span class="model-icr-hint">ICR 40–45%</span></div>`;
+  }
+
   return `
     <article class="model-card" data-id="${m.id}">
       <div class="model-photo">
@@ -5865,6 +5916,7 @@ function modelCardHTML(m) {
       <div class="model-bottom">
         <div class="model-cost">
           ${formatPrice(m.cost)}${m.pairs > 0 ? `<span class="model-pairs"> × ${m.pairs} = ${formatPrice((m.cost || 0) * m.pairs)}</span>` : ''}
+          ${salesLine}
         </div>
         <button class="status-badge ${status.cls}"><span class="status-icon">${status.icon}</span>${status.label}</button>
       </div>
@@ -6316,9 +6368,10 @@ function openModelModal(modelId, defaultCategory) {
       }
     }
 
-    // Auto-suggest sale price (ICR 40%) only if the user hasn't set one
+    // Auto-suggest sale price (ICR 40%, arredondado) only if the user hasn't set one
     if (fSale && editable && !saleTouched && cost > 0) {
-      fSale.value = String(Math.round(cost / ICR_IDEAL)).replace('.', ',');
+      const idealFill = Math.round((cost / ICR_IDEAL) / 10) * 10;
+      fSale.value = String(idealFill).replace('.', ',');
     }
 
     // Live ICR readout + suggestion range
@@ -6338,9 +6391,13 @@ function openModelModal(modelId, defaultCategory) {
     }
     if (icrHint) {
       if (cost > 0) {
-        const ideal = Math.round(cost / ICR_IDEAL);
-        const min = Math.round(cost / ICR_MAX);
-        icrHint.innerHTML = `Sugerido <strong>(ICR 40%): R$ ${formatMoney(ideal)}</strong> · Mínimo (ICR 45%): R$ ${formatMoney(min)}`;
+        const floor = Math.ceil((cost / ICR_MAX) / 10) * 10;   // ICR 45% — mínimo
+        let ideal = Math.round((cost / ICR_IDEAL) / 10) * 10;  // ICR 40% — ideal
+        if (ideal < floor) ideal = floor;
+        const range = floor === ideal
+          ? `R$ ${floor.toLocaleString('pt-BR')}`
+          : `R$ ${floor.toLocaleString('pt-BR')} – R$ ${ideal.toLocaleString('pt-BR')}`;
+        icrHint.innerHTML = `Venda sugerida: <strong>${range}</strong> (ICR 40–45%)`;
       } else {
         icrHint.textContent = 'Digite o custo para ver a sugestão de preço de venda (ICR 40–45%).';
       }
