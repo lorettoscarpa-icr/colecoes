@@ -39,37 +39,38 @@ window.AUTHORIZED_USERS = {
 </script>
 <style>
   :root {
-    --bg: #353d28;
-    --bg-2: #3f4830;
-    --surface: #475032;
-    --surface-2: #58633e;
-    --border: #717a4f;
-    --border-strong: #859061;
-    --gold: #d4b85e;
-    --gold-soft: #b89844;
-    --gold-glow: rgba(212, 184, 94, 0.22);
-    --green: #6e8540;
-    --green-soft: #8aa256;
-    --text: #f2eee0;
-    --text-2: #c4bfaf;
-    --text-3: #a39e8a;
+    /* Paleta unificada com a Central de Metas */
+    --bg: #283d1a;
+    --bg-2: #374f24;
+    --surface: #46672f;
+    --surface-2: #60813e;
+    --border: rgba(212, 180, 90, 0.30);
+    --border-strong: rgba(212, 180, 90, 0.55);
+    --gold: #d4b45a;
+    --gold-soft: #b08840;
+    --gold-glow: rgba(212, 180, 90, 0.30);
+    --green: #46672f;
+    --green-soft: #60813e;
+    --text: #f8f3e6;
+    --text-2: rgba(248, 243, 230, 0.78);
+    --text-3: rgba(248, 243, 230, 0.52);
     --status-undef: #8a8a7e;
-    --status-def: #d4b85e;
+    --status-def: #d4b45a;
     --status-ord: #e0892a;
-    --status-rec: #8aae4a;
+    --status-rec: #5cb85c;
     --shadow-lg: 0 20px 60px -20px rgba(0,0,0,0.5), 0 8px 20px -8px rgba(0,0,0,0.3);
     --shadow-md: 0 8px 24px -8px rgba(0,0,0,0.4);
     --shadow-gold: 0 0 0 1px var(--gold), 0 8px 30px -8px var(--gold-glow);
-    --tag-bg: rgba(212, 184, 94, 0.14);
-    --overlay: rgba(39, 46, 29, 0.85);
-    --overlay-soft: rgba(39, 46, 29, 0.7);
+    --tag-bg: rgba(212, 180, 90, 0.14);
+    --overlay: rgba(40, 61, 26, 0.85);
+    --overlay-soft: rgba(40, 61, 26, 0.7);
     --overlay-strong: rgba(0, 0, 0, 0.6);
     --photo-gradient: linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0) 50%);
     --photo-overlay-text: #ffffff;
-    --bg-radial-1: rgba(212, 184, 94, 0.08);
-    --bg-radial-2: rgba(110, 133, 64, 0.07);
-    --welcome-radial-1: rgba(212, 184, 94, 0.13);
-    --welcome-radial-2: rgba(110, 133, 64, 0.08);
+    --bg-radial-1: rgba(212, 180, 90, 0.08);
+    --bg-radial-2: rgba(70, 103, 47, 0.07);
+    --welcome-radial-1: rgba(212, 180, 90, 0.13);
+    --welcome-radial-2: rgba(70, 103, 47, 0.08);
     --skeleton-1: var(--surface);
     --skeleton-2: var(--surface-2);
   }
@@ -1361,8 +1362,8 @@ window.AUTHORIZED_USERS = {
 
   .tab-deadline.attention {
     color: var(--status-def);
-    border-color: rgba(212, 184, 94, 0.5);
-    background: rgba(212, 184, 94, 0.1);
+    border-color: rgba(212, 180, 90, 0.5);
+    background: rgba(212, 180, 90, 0.1);
   }
 
   /* ============== MONTH DEADLINE BAR (inside month view) ============== */
@@ -1397,9 +1398,9 @@ window.AUTHORIZED_USERS = {
 
   .month-deadline-bar.dl-attention {
     color: var(--status-def);
-    border-color: rgba(212, 184, 94, 0.4);
+    border-color: rgba(212, 180, 90, 0.4);
     border-left-color: var(--status-def);
-    background: rgba(212, 184, 94, 0.06);
+    background: rgba(212, 180, 90, 0.06);
   }
 
   .month-deadline-bar.dl-urgent {
@@ -1629,8 +1630,8 @@ window.AUTHORIZED_USERS = {
 
   .totals-deadline-chip.dl-attention {
     color: var(--status-def);
-    border-color: rgba(212, 184, 94, 0.45);
-    background: rgba(212, 184, 94, 0.08);
+    border-color: rgba(212, 180, 90, 0.45);
+    background: rgba(212, 180, 90, 0.08);
   }
 
   .totals-deadline-chip.dl-safe {
@@ -7937,13 +7938,13 @@ async function handleGenerateSupplierSummary() {
   }
 
   .sup-notice-samples {
-    background: rgba(212, 184, 94, 0.08);
-    border-color: rgba(212, 184, 94, 0.45);
+    background: rgba(212, 180, 90, 0.08);
+    border-color: rgba(212, 180, 90, 0.45);
   }
 
   .sup-notice-deadline {
-    background: rgba(110, 133, 64, 0.08);
-    border-color: rgba(110, 133, 64, 0.45);
+    background: rgba(70, 103, 47, 0.08);
+    border-color: rgba(70, 103, 47, 0.45);
   }
 
   .sup-notice-icon {
